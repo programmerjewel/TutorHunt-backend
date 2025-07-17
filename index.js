@@ -25,11 +25,51 @@ async function run() {
    const tutorCollection = client.db('tutorsdb').collection('tutors');
    const bookedTutorCollection = client.db('tutorsdb').collection('booked-tutors');
   
-    
+    //get all tutors from db
+    app.get('/find-tutors', async(req, res) =>{
+      const email = req.query.email;
+      let query = {};
 
-   
-
+      if(email){
+        query= {email: email}
+      }
+      try{
+        const result = await tutorCollection.find(query).toArray();
+        res.send(result)
+      }
+      catch(err){
+        res.status(500).send(err.message)
+      }
+    })
     
+    //get a single tutor details by id
+    app.get('/tutors/:id', async(req, res) =>{
+      const id = req.params.id;
+      const query = {_id: new ObjectId(id)};
+      const result = await tutorCollection.findOne(query);
+      res.send(result);
+    })
+
+    //get tutor by language category
+    app.get('/find-tutors/:category' , async(req, res) =>{
+      const category = req.params.category.toLowerCase();
+      const query = {language: {
+        $eq : category.charAt(0).toUpperCase() + category.slice(1)
+      }};
+
+      const result = await tutorCollection.find(query).toArray();
+      res.send(result);
+    })
+
+
+    //get booked tutor data for user's email from db
+    app.get('/booked-tutors/:email', async(req, res) =>{
+      const email = req.query.email;
+      const query = {email: email};
+      const result = await bookedTutorCollection.find(query).toArray();
+      res.send(result)
+    })
+
     await client.db('admin').command({ ping: 1 });
     console.log('Pinged your deployment. You successfully connected to MongoDB!');
 
