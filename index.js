@@ -1,5 +1,5 @@
 const express = require('express');
-const cors = require('cors')
+const cors = require('cors');
 const {MongoClient, ServerApiVersion, ObjectId} = require('mongodb')
 require('@dotenvx/dotenvx').config() 
 
@@ -42,11 +42,35 @@ async function run() {
       }
     })
     
+    //add a single tutor data to db
+    app.post('/tutors', async(req, res) =>{
+      const tutor = req.body;
+      const result = await tutorCollection.insertOne(tutor);
+      res.send(result);
+    })
+
     //get a single tutor details by id
     app.get('/tutors/:id', async(req, res) =>{
       const id = req.params.id;
       const query = {_id: new ObjectId(id)};
       const result = await tutorCollection.findOne(query);
+      res.send(result);
+    })
+
+    //update a single tutor data by id
+    app.patch('/tutors/:id', async(req, res) =>{
+      const id = req.params.id;
+      const tutorData = req.body;
+      const updatedTutorData = {
+        $set: {
+          image: tutorData.image,
+          language: tutorData.language,
+          price: tutorData.price,
+          description: tutorData.description
+        }
+      }
+      const query = {_id: new ObjectId(id)};
+      const result = await tutorCollection.updateOne(query, updatedTutorData);
       res.send(result);
     })
 
@@ -68,9 +92,28 @@ async function run() {
       const query = {userEmail: email};
       
       const result = await bookedTutorCollection.find(query).toArray();
-      
       res.send(result);
     })
+
+    //delete specific tutor from db
+    app.delete('/tutors/:id', async(req, res) => {
+      try {
+        const id = req.params.id;
+        console.log('Deleting tutor with ID:', id); // This will show the ID in console
+        
+        const query = {_id: new ObjectId(id)};
+        const result = await tutorCollection.deleteOne(query);
+        
+        if(result.deletedCount === 1) {
+          res.send({success: true, message: 'Tutor deleted successfully'});
+        } else {
+          res.status(404).send({success: false, message: 'Tutor not found'});
+        }
+      } catch (err) {
+        console.error('Delete error:', err);
+        res.status(500).send({success: false, message: 'Error deleting tutor'});
+      }
+    });
 
     await client.db('admin').command({ ping: 1 });
     console.log('Pinged your deployment. You successfully connected to MongoDB!');
