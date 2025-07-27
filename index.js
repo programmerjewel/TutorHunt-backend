@@ -1,7 +1,7 @@
+require('@dotenvx/dotenvx').config();
 const express = require('express');
 const cors = require('cors');
 const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
-require('@dotenvx/dotenvx').config();
 const jwt = require('jsonwebtoken');
 const cookieParser = require('cookie-parser');
 
@@ -9,7 +9,11 @@ const port = process.env.PORT || 4000;
 const app = express();
 
 const corsOptions = {
-  origin: ['http://localhost:5173'],
+  origin: [
+    'http://localhost:5173',
+    'https://tutor-hub-2025.web.app',
+    'https://tutor-hub-2025.firebaseapp.com'
+  ],
   credentials: true,
   optionsSuccessStatus: 200,
 };
@@ -75,15 +79,32 @@ async function run() {
 
     //get all tutors from db
     app.get('/find-tutors', async (req, res) => {
-      const email = req.query.email;
-      let query = {};
+      
+      //determine no. of pages on pagination
+      const page = parseInt(req.query.page) || 1;
 
-      if (email) {
-        query = { email: email };
+      //determine no. of data shown each page
+      const limit = parseInt(req.query.limit) || 10;
+
+      // calculate no. of data to skipbased on current page and limit
+      const skip = (page - 1) * limit;
+      
+      let query = {};
+      
+      //if user email added on query
+      if (req.query.email) {
+        query = { email: req.query.email };
       }
+      //if language added on query
+      if (req.query.language) {
+        query.language = { $regex: req.query.language, $options: 'i' };
+      }
+
       try {
-        const result = await tutorCollection.find(query).toArray();
-        res.send(result);
+        const total = await tutorCollection.countDocuments(query);
+        const result = await tutorCollection.find(query).skip(skip).limit(limit).sort({_id: 1}).toArray();
+
+        res.send({result, currentPage: page, totalPage: Math.ceil(total / limit), totalItems: total});
       } catch (err) {
         res.status(500).send(err.message);
       }
@@ -254,7 +275,55 @@ async function run() {
       }
     });
 
-    await client.db('admin').command({ ping: 1 });
+    //stat about tutors, reviews, lanuages
+    app.get('/stats', async(req, res) =>{
+      
+      const totalTutors = await tutorCollection.countDocuments();
+      
+      // Get distinct languages using aggregation
+    const languageResult = await tutorCollection
+      .aggregate([
+        {
+          $group: {
+            _id: '$language', // Group by the language field
+          },
+        },
+        {
+          $count: 'totalLanguages', // Count the number of unique languages
+        },
+      ])
+      .toArray();
+    const totalLanguages = languageResult.length > 0 ? languageResult[0].totalLanguages : 0;
+
+      //get total review counts
+      const reviewStat = await tutorCollection.aggregate([{
+        $group:{
+          _id: null,
+          totalReviews: {$sum: "$review"},
+        }
+      }]).toArray();
+
+      const totalReviews = reviewStat.length > 0 ? reviewStat[0].totalReviews : 0;
+
+      // Get total unique users based on userEmail
+    const userResult = await bookedTutorCollection
+      .aggregate([
+        {
+          $group: {
+            _id: '$userEmail', // Group by the userEmail field
+          },
+        },
+        {
+          $count: 'totalUsers', // Count the number of unique users
+        },
+      ])
+      .toArray();
+    const totalUsers = userResult.length > 0 ? userResult[0].totalUsers : 0;
+
+      res.send({totalTutors, totalLanguages, totalReviews, totalUsers})
+    })
+
+    // await client.db('admin').command({ ping: 1 });
     console.log('Pinged your deployment. You successfully connected to MongoDB!');
   } catch (err) {
     console.error(err);
